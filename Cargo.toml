@@ -1,0 +1,9 @@
+[package]
+name = "qrs_detector"
+version = "0.1.0"
+authors = ["Dániel Buga <bugadani@gmail.com>"]
+edition = "2018"
+
+[dependencies]
+sliding_window = { git = "https://github.com/bugadani/SlidingWindow" }
+micromath = "^1.0.0"
