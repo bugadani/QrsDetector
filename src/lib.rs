@@ -55,3 +55,56 @@ mod internal {
         }
     }
 }
+
+mod sampling {
+    pub type SamplingFrequency = f32;
+
+    pub trait SamplingFrequencyExt {
+        fn sps(self) -> SamplingFrequency;
+        fn ksps(self) -> SamplingFrequency;
+    }
+
+    pub trait SamplingFrequencyHelpers {
+        fn ms_to_samples(self, ms: f32) -> u32;
+    }
+
+    impl SamplingFrequencyExt for f32 {
+        fn sps(self) -> SamplingFrequency {
+            self
+        }
+
+        fn ksps(self) -> SamplingFrequency {
+            (self * 1000.0).sps()
+        }
+    }
+
+    impl SamplingFrequencyExt for usize {
+        fn sps(self) -> SamplingFrequency {
+            self as SamplingFrequency
+        }
+
+        fn ksps(self) -> SamplingFrequency {
+            (self * 1000).sps()
+        }
+    }
+
+    impl SamplingFrequencyHelpers for SamplingFrequency {
+        fn ms_to_samples(self, ms: f32) -> u32 {
+            ((ms * self) as u32) / 1000
+        }
+    }
+
+    #[cfg(test)]
+    mod sps_test {
+        use super::SamplingFrequencyExt;
+        use super::SamplingFrequencyHelpers;
+
+        #[test]
+        fn sanity_test() {
+            assert_eq!(50, 1.ksps().ms_to_samples(50.0));
+            assert_eq!(50, 1.0.ksps().ms_to_samples(50.0));
+
+            assert_eq!(1, 100.sps().ms_to_samples(10.0));
+        }
+    }
+}
