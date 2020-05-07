@@ -1,8 +1,15 @@
 [package]
 name = "qrs_detector"
 version = "0.1.0"
+license = "MIT"
+repository = "https://github.com/bugadani/QrsDetector"
+description = "Realtime ECG QRS detector algorithm"
 authors = ["Dániel Buga <bugadani@gmail.com>"]
 edition = "2018"
+categories = ["no_std", "ecg", "algorithms"]
+exclude = [
+    ".github/*",
+]
 
 [dependencies]
 sliding_window = { git = "https://github.com/bugadani/SlidingWindow" }

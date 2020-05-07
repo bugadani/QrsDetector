@@ -1,8 +1,11 @@
 //! This crate provides a realtime ECG QRS detector.
 //!
-//! Implementation based on https://biomedical-engineering-online.biomedcentral.com/articles/10.1186/1475-925X-3-28
+//! The implementation is based on [this article](https://biomedical-engineering-online.biomedcentral.com/articles/10.1186/1475-925X-3-28).
 //!
-//! Because this crate relies on generic_array, there's a bit of setup necessary to set the size of internal buffers.
+//! QrsDetector does not use dynamic memory allocation. Instead, this crate relies on [`generic_array`](../generic_array/index.html),
+//! which means there's a bit of setup necessary to set the size of internal buffers.
+//!
+//! For more information, see [`QrsDetector`](./struct.QrsDetector.html).
 #![cfg_attr(not(test), no_std)]
 
 mod internal {
@@ -168,8 +171,10 @@ mod algorithms {
 
         pub fn new(fs: SamplingFrequency) -> Self {
             // sanity check buffer sizes
-            debug_assert_eq!(FMW::to_u32(), fs.ms_to_samples(350.0), "First type parameter must be U{}", fs.ms_to_samples(350.0));
-            debug_assert_eq!(FB::to_u32(), fs.ms_to_samples(50.0), "Second type parameter must be U{}", fs.ms_to_samples(50.0));
+            debug_assert_eq!(FMW::to_u32(), fs.ms_to_samples(350.0),
+                "Incorrect type parameters, must be <U{}, U{}>", fs.ms_to_samples(350.0), fs.ms_to_samples(50.0));
+            debug_assert_eq!(FB::to_u32(), fs.ms_to_samples(50.0),
+                "Incorrect type parameters, must be <U{}, U{}>", fs.ms_to_samples(350.0), fs.ms_to_samples(50.0));
 
             Self {
                 fs,
@@ -284,68 +289,23 @@ mod algorithms {
     }
 }
 
-pub mod sampling {
-    pub type SamplingFrequency = f32;
-
-    pub trait SamplingFrequencyExt {
-        fn sps(self) -> SamplingFrequency;
-        fn ksps(self) -> SamplingFrequency;
-    }
-
-    pub trait SamplingFrequencyHelpers {
-        fn ms_to_samples(self, ms: f32) -> u32;
-        fn s_to_samples(self, s: f32) -> u32;
-    }
-
-    impl SamplingFrequencyExt for f32 {
-        fn sps(self) -> SamplingFrequency {
-            self
-        }
-
-        fn ksps(self) -> SamplingFrequency {
-            (self * 1000.0).sps()
-        }
-    }
-
-    impl SamplingFrequencyExt for usize {
-        fn sps(self) -> SamplingFrequency {
-            self as SamplingFrequency
-        }
-
-        fn ksps(self) -> SamplingFrequency {
-            (self * 1000).sps()
-        }
-    }
-
-    impl SamplingFrequencyHelpers for SamplingFrequency {
-        fn ms_to_samples(self, ms: f32) -> u32 {
-            ((ms * self) as u32) / 1000
-        }
-        fn s_to_samples(self, s: f32) -> u32 {
-            self.ms_to_samples(s * 1000.0)
-        }
-    }
-
-    #[cfg(test)]
-    mod sps_test {
-        use super::SamplingFrequencyExt;
-        use super::SamplingFrequencyHelpers;
-
-        #[test]
-        fn sanity_test() {
-            assert_eq!(50, 1.ksps().ms_to_samples(50.0));
-            assert_eq!(50, 1.0.ksps().ms_to_samples(50.0));
-
-            assert_eq!(1, 100.sps().ms_to_samples(10.0));
-        }
-    }
-}
-
+/// Helpers for working with sampling frequencies and sample numbers.
+pub mod sampling;
 use sampling::*;
 
 use algorithms::{M, F, R};
 
 /// Find QRS complex in real-time sampled ECG signal.
+///
+/// # Type parameters:
+///
+/// The `QrsDetector` is built upon [`generic_array`](../generic_array/index.html). This has an unfortunate implementation detail
+/// where the internal buffer sizes must be set on the type level.
+///
+/// - `FMW` - number of samples representing 350ms, as [`typenum::U*`](../typenum/consts/index.html)
+/// - `FB` - number of samples representing 50ms, as [`typenum::U*`](../typenum/consts/index.html)
+///
+/// These type parameters are checked at runtime and if incorrect and the error message will contain the correct sizes.
 pub struct QrsDetector<FMW, FB>
     where
         FMW: Size<f32>,
@@ -366,7 +326,7 @@ impl<FMW, FB> QrsDetector<FMW, FB>
     /// Returns a new QRS detector for signals sampled at `fs` sampling frequency.
     ///
     /// # Arguments
-    /// * `fs` - The sampling frequency of the processed signal
+    /// * `fs` - The sampling frequency of the processed signal. For more information see [`SamplingFrequencyExt`](./sampling/trait.SamplingFrequencyExt.html).
     ///
     /// # Example
     /// ```rust
@@ -395,7 +355,6 @@ impl<FMW, FB> QrsDetector<FMW, FB>
     }
 
     /// Process a sample. Returns Some sample index if a QRS complex is detected.
-    /// The returned sample index belongs to the steepest part of the signal.
     pub fn update(&mut self, input: f32) -> Option<u32> {
         let mut result = None;
         if let Some(sample) = self.differentiator.update(input) {
