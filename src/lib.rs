@@ -12,7 +12,7 @@ mod internal {
     use micromath::F32Ext;
 
     use sliding_window::{
-        SlidingWindow, Producer,
+        SlidingWindow,
         typenum::consts::U2
     };
 
@@ -67,7 +67,7 @@ pub use sliding_window::typenum;
 
 mod algorithms {
     use sliding_window::{
-        SlidingWindow, Producer, Reader, Size,
+        SlidingWindow, Size,
         typenum::consts::*
     };
 
@@ -274,7 +274,7 @@ mod algorithms {
                 RState::Ignore => self.state = RState::InitBuffer,
                 RState::InitBuffer => {
                     self.rr.insert(idx.wrapping_sub(self.prev_idx));
-                    if self.rr.full() {
+                    if self.rr.is_full() {
                         self.enter_no_decrease();
                     }
                 },
