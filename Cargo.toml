@@ -1,6 +1,6 @@
 [package]
 name = "qrs_detector"
-version = "0.1.0"
+version = "0.1.1"
 license = "MIT"
 repository = "https://github.com/bugadani/QrsDetector"
 description = "Realtime ECG QRS detector algorithm"
@@ -13,5 +13,5 @@ exclude = [
 ]
 
 [dependencies]
-sliding_window = "0.1.0"
+sliding_window = "^0.1.0"
 micromath = "^1.0.0"
