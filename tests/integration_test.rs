@@ -1838,9 +1838,9 @@ const SIGNAL: &[f32] = &[
     14.1232846228911,
 ];
 
-use qrs_detector::QrsDetector;
 use qrs_detector::sampling::*;
 use qrs_detector::typenum::*;
+use qrs_detector::QrsDetector;
 
 #[test]
 fn test_simulated_signal() {

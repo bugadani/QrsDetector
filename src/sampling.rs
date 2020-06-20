@@ -1,5 +1,5 @@
 /// Type alias for clarity. For more information see [`SamplingFreqencyExt`](./trait.SamplingFrequencyExt.html)
-/// and [`SamplingFrequencyHelpers`](./trait.SamplingFrequencyHelpers.html).
+/// and [`Helpers`](./trait.Helpers.html).
 pub type SamplingFrequency = f32;
 
 /// Extension functions for numeric types used to create [`SamplingFreqency`](./struct.SamplingFrequency.html) values.
@@ -40,7 +40,7 @@ impl SamplingFrequencyExt for usize {
 }
 
 /// Helper functions to make some sampling time related conversions simpler.
-pub trait SamplingFrequencyHelpers {
+pub trait Helpers {
     /// Convert `ms` milliseconds to number of samples
     /// ```rust
     /// # use qrs_detector::sampling::*;
@@ -60,7 +60,7 @@ pub trait SamplingFrequencyHelpers {
     fn s_to_samples(self, s: f32) -> u32;
 }
 
-impl SamplingFrequencyHelpers for SamplingFrequency {
+impl Helpers for SamplingFrequency {
     fn ms_to_samples(self, ms: f32) -> u32 {
         ((ms * self) as u32) / 1000
     }

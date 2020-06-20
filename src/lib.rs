@@ -2,7 +2,8 @@
 //!
 //! The implementation is based on [this article](https://biomedical-engineering-online.biomedcentral.com/articles/10.1186/1475-925X-3-28).
 //!
-//! QrsDetector does not use dynamic memory allocation. Instead, this crate relies on [`generic_array`](../generic_array/index.html),
+//! `QrsDetector` does not use dynamic memory allocation. Instead, this crate relies on
+//! [`generic_array`](../generic_array/index.html),
 //! which means there's a bit of setup necessary to set the size of internal buffers.
 //!
 //! For more information, see [`QrsDetector`](./struct.QrsDetector.html).
@@ -11,27 +12,24 @@
 mod internal {
     use micromath::F32Ext;
 
-    use sliding_window::{
-        SlidingWindow,
-        typenum::consts::U2
-    };
+    use sliding_window::{typenum::consts::U2, SlidingWindow};
 
     pub fn max(a: f32, b: f32) -> f32 {
-        if a < b {
-            b
-        } else {
+        if a > b {
             a
+        } else {
+            b
         }
     }
 
     pub struct Differentiator {
-        window: SlidingWindow<f32, U2>
+        window: SlidingWindow<f32, U2>,
     }
 
     impl Differentiator {
         pub fn new() -> Self {
             Self {
-                window: SlidingWindow::new()
+                window: SlidingWindow::new(),
             }
         }
 
@@ -60,33 +58,31 @@ mod internal {
     }
 }
 
+use if_chain::if_chain;
 use sliding_window::Size;
 
 use internal::Differentiator;
 pub use sliding_window::typenum;
 
 mod algorithms {
-    use sliding_window::{
-        SlidingWindow, Size,
-        typenum::consts::*
-    };
+    use sliding_window::{typenum::consts::U5, Size, SlidingWindow};
 
-    use crate::sampling::*;
     use crate::internal::max;
+    use crate::sampling::*;
 
     #[derive(Copy, Clone, Debug)]
     pub enum MState {
         Init(u32, f32),
         Disallow(u32, f32),
         Decreasing(u32, f32, f32),
-        ConstantLow(f32)
+        ConstantLow(f32),
     }
 
     pub struct M {
         state: MState,
         mm: SlidingWindow<f32, U5>,
         fs: SamplingFrequency,
-        pub current_decrement: f32
+        pub current_decrement: f32,
     }
 
     impl M {
@@ -95,7 +91,7 @@ mod algorithms {
                 fs,
                 mm: SlidingWindow::new(),
                 state: MState::Init(fs.s_to_samples(3.0), 0.0),
-                current_decrement: 0.0
+                current_decrement: 0.0,
             }
         }
 
@@ -116,7 +112,7 @@ mod algorithms {
                     let decrement = m * 0.4 / n_samples as f32;
                     self.current_decrement = decrement;
                     MState::Decreasing(n_samples, m, decrement)
-                },
+                }
                 MState::Init(samples, m) => MState::Init(samples - 1, max(m, sample)),
                 MState::Disallow(0, m) => {
                     let m = 0.6 * max(m, sample) / 5.0; // divide by 5 for averaging
@@ -129,16 +125,18 @@ mod algorithms {
                     let decrement = m * 0.4 / n_samples as f32;
                     self.current_decrement = decrement;
                     MState::Decreasing(n_samples, m, decrement)
-                },
+                }
                 MState::Disallow(samples, m) => MState::Disallow(samples - 1, max(m, sample)),
                 MState::Decreasing(0, m, _) => MState::ConstantLow(m),
-                MState::Decreasing(samples, m, decrease_amount) => MState::Decreasing(samples - 1, m - decrease_amount, decrease_amount),
-                MState::ConstantLow(m) => MState::ConstantLow(m)
+                MState::Decreasing(samples, m, decrease_amount) => {
+                    MState::Decreasing(samples - 1, m - decrease_amount, decrease_amount)
+                }
+                MState::ConstantLow(m) => MState::ConstantLow(m),
             };
 
             match self.state {
                 MState::Init(_, _) | MState::Disallow(_, _) => None,
-                MState::Decreasing(_, m, _) | MState::ConstantLow(m) => Some(m)
+                MState::Decreasing(_, m, _) | MState::ConstantLow(m) => Some(m),
             }
         }
 
@@ -151,50 +149,68 @@ mod algorithms {
     pub enum FState {
         Ignore(u32),
         Init(u32, f32),
-        Integrate(f32)
+        Integrate(f32),
     }
 
     pub struct F<FMW, FB>
-        where
-            FMW: Size<f32>,
-            FB: Size<f32> {
-        state: FState,
+    where
+        FMW: Size<f32>,
+        FB: Size<f32>,
+    {
+        /// Sampling frequency
         fs: SamplingFrequency,
+        /// F should be initialized at the same time as M is, skip earlier samples
+        state: FState,
+        /// 350ms of the individual max samples of the 50ms buffer
         f_max_window: SlidingWindow<f32, FMW>,
+        /// 50ms window of the signal
         f_buffer: SlidingWindow<f32, FB>,
     }
 
     impl<FMW, FB> F<FMW, FB>
-        where
-            FMW: Size<f32>,
-            FB: Size<f32> {
-
+    where
+        FMW: Size<f32>,
+        FB: Size<f32>,
+    {
         pub fn new(fs: SamplingFrequency) -> Self {
             // sanity check buffer sizes
-            debug_assert_eq!(FMW::to_u32(), fs.ms_to_samples(350.0),
-                "Incorrect type parameters, must be <U{}, U{}>", fs.ms_to_samples(350.0), fs.ms_to_samples(50.0));
-            debug_assert_eq!(FB::to_u32(), fs.ms_to_samples(50.0),
-                "Incorrect type parameters, must be <U{}, U{}>", fs.ms_to_samples(350.0), fs.ms_to_samples(50.0));
+            debug_assert_eq!(
+                FMW::to_u32(),
+                fs.ms_to_samples(350.0),
+                "Incorrect type parameters, must be <U{}, U{}>",
+                fs.ms_to_samples(350.0),
+                fs.ms_to_samples(50.0)
+            );
+            debug_assert_eq!(
+                FB::to_u32(),
+                fs.ms_to_samples(50.0),
+                "Incorrect type parameters, must be <U{}, U{}>",
+                fs.ms_to_samples(350.0),
+                fs.ms_to_samples(50.0)
+            );
 
             Self {
                 fs,
-                state: FState::Ignore(fs.s_to_samples(2.65)), // F should be initialized at the same time as M is, skip earlier samples
-                f_max_window: SlidingWindow::new(), // 350ms of the individual max samples of the 50ms buffer
-                f_buffer: SlidingWindow::new(), // 50ms window of the signal
+                state: FState::Ignore(fs.s_to_samples(2.65)),
+                f_max_window: SlidingWindow::new(),
+                f_buffer: SlidingWindow::new(),
             }
         }
 
         fn update_f_buffers(&mut self, sample: f32) -> (Option<f32>, f32) {
             // TODO: there are some special cases where the max search can be skipped
             self.f_buffer.insert(sample);
-            let max = *self.f_buffer.iter_unordered().max_by(|a, b| a.partial_cmp(b).unwrap()).unwrap();
+            let max = *self
+                .f_buffer
+                .iter_unordered()
+                .max_by(|a, b| a.partial_cmp(b).unwrap())
+                .unwrap();
             let old = self.f_max_window.insert(max);
 
             (old, max)
         }
 
         pub fn update(&mut self, sample: f32) -> Option<f32> {
-
             self.state = match self.state {
                 FState::Ignore(1) => FState::Init(self.fs.ms_to_samples(350.0), 0.0),
                 FState::Ignore(n) => FState::Ignore(n - 1),
@@ -203,13 +219,13 @@ mod algorithms {
                     self.update_f_buffers(sample);
 
                     FState::Integrate(favg / (FMW::to_u32() as f32))
-                },
+                }
                 FState::Init(n, favg) => {
                     let favg = favg + sample;
                     self.update_f_buffers(sample);
 
-                    FState::Init(n-1, favg)
-                },
+                    FState::Init(n - 1, favg)
+                }
                 FState::Integrate(f) => {
                     let (oldest_max, max) = self.update_f_buffers(sample);
                     FState::Integrate(f + (max - oldest_max.unwrap()) / 150.0)
@@ -236,7 +252,7 @@ mod algorithms {
     pub struct R {
         state: RState,
         rr: SlidingWindow<u32, U5>,
-        prev_idx: u32 // no need to make it an Option
+        prev_idx: u32, // no need to make it an Option
     }
 
     impl R {
@@ -244,7 +260,7 @@ mod algorithms {
             Self {
                 state: RState::Ignore,
                 rr: SlidingWindow::new(),
-                prev_idx: 0
+                prev_idx: 0,
             }
         }
 
@@ -256,16 +272,20 @@ mod algorithms {
 
         pub fn update(&mut self, m_decrement: f32) -> f32 {
             self.state = match self.state {
-                RState::NoDecrease(0, rr_avg) => RState::Decrease(rr_avg / 3, 0.0, m_decrement / 1.4),
+                RState::NoDecrease(0, rr_avg) => {
+                    RState::Decrease(rr_avg / 3, 0.0, m_decrement / 1.4)
+                }
                 RState::NoDecrease(samples, rr_avg) => RState::NoDecrease(samples - 1, rr_avg),
                 RState::Decrease(0, r, _) => RState::Constant(r),
-                RState::Decrease(samples, r, decrement) => RState::Decrease(samples - 1, r - decrement, decrement),
-                o => o
+                RState::Decrease(samples, r, decrement) => {
+                    RState::Decrease(samples - 1, r - decrement, decrement)
+                }
+                o => o,
             };
 
             match self.state {
                 RState::Ignore | RState::InitBuffer | RState::NoDecrease(_, _) => 0.0,
-                RState::Constant(r) | RState::Decrease(_, r, _) => r
+                RState::Constant(r) | RState::Decrease(_, r, _) => r,
             }
         }
 
@@ -277,7 +297,7 @@ mod algorithms {
                     if self.rr.is_full() {
                         self.enter_no_decrease();
                     }
-                },
+                }
                 _ => {
                     self.rr.insert(idx.wrapping_sub(self.prev_idx));
                     self.enter_no_decrease();
@@ -291,42 +311,46 @@ mod algorithms {
 
 /// Helpers for working with sampling frequencies and sample numbers.
 pub mod sampling;
-use sampling::*;
+use sampling::SamplingFrequency;
 
-use algorithms::{M, F, R};
+use algorithms::{F, M, R};
 
 /// Find QRS complex in real-time sampled ECG signal.
 ///
 /// # Type parameters:
 ///
-/// The `QrsDetector` is built upon [`generic_array`](../generic_array/index.html). This has an unfortunate implementation detail
-/// where the internal buffer sizes must be set on the type level.
+/// The `QrsDetector` is built upon [`generic_array`](../generic_array/index.html).
+/// This has an unfortunate implementation detail where the internal buffer sizes must be set on
+/// the type level.
 ///
 /// - `FMW` - number of samples representing 350ms, as [`typenum::U*`](../typenum/consts/index.html)
 /// - `FB` - number of samples representing 50ms, as [`typenum::U*`](../typenum/consts/index.html)
 ///
-/// These type parameters are checked at runtime and if incorrect and the error message will contain the correct sizes.
+/// These type parameters are checked at runtime and if incorrect and the error message will contain
+/// the correct sizes.
 pub struct QrsDetector<FMW, FB>
-    where
-        FMW: Size<f32>,
-        FB: Size<f32> {
+where
+    FMW: Size<f32>,
+    FB: Size<f32>,
+{
     fs: SamplingFrequency,
     differentiator: Differentiator,
     total_samples: u32,
     m: M,
     f: F<FMW, FB>,
-    r: R
+    r: R,
 }
 
 impl<FMW, FB> QrsDetector<FMW, FB>
-    where
-        FMW: Size<f32>,
-        FB: Size<f32> {
-
+where
+    FMW: Size<f32>,
+    FB: Size<f32>,
+{
     /// Returns a new QRS detector for signals sampled at `fs` sampling frequency.
     ///
     /// # Arguments
-    /// * `fs` - The sampling frequency of the processed signal. For more information see [`SamplingFrequencyExt`](./sampling/trait.SamplingFrequencyExt.html).
+    /// * `fs` - The sampling frequency of the processed signal. For more information see
+    /// [`SamplingFrequencyExt`](./sampling/trait.SamplingFrequencyExt.html).
     ///
     /// # Example
     /// ```rust
@@ -345,7 +369,7 @@ impl<FMW, FB> QrsDetector<FMW, FB>
             differentiator: Differentiator::new(),
             m: M::new(fs),
             f: F::new(fs),
-            r: R::new()
+            r: R::new(),
         }
     }
 
@@ -356,21 +380,24 @@ impl<FMW, FB> QrsDetector<FMW, FB>
 
     /// Process a sample. Returns Some sample index if a QRS complex is detected.
     pub fn update(&mut self, input: f32) -> Option<u32> {
-        let mut result = None;
-        if let Some(sample) = self.differentiator.update(input) {
-
+        let result = self.differentiator.update(input).and_then(|sample| {
             let m = self.m.update(sample);
             let f = self.f.update(sample);
             let r = self.r.update(self.m.current_decrement);
 
-            if let (Some(m), Some(f)) = (m, f) {
-                if sample > m + f + r {
+            if_chain! {
+                if let Some(m) = m;
+                if let Some(f) = f;
+                if sample > m + f + r;
+                then {
                     self.m.detection_event(sample);
                     self.r.detection_event(self.total_samples);
-                    result = Some(self.total_samples);
+                    Some(self.total_samples)
+                } else {
+                    None
                 }
             }
-        }
+        });
 
         self.total_samples += 1;
 
