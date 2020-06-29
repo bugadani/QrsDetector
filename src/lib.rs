@@ -262,17 +262,15 @@ mod algorithms {
             self.state = match self.state {
                 FState::Ignore(1) => FState::Init(self.fs.ms_to_samples(350.0), 0.0),
                 FState::Ignore(n) => FState::Ignore(n - 1),
-                FState::Init(1, favg) => {
-                    let favg = favg + sample;
-                    self.update_f_buffers(sample);
-
-                    FState::Integrate(favg / (FMW::to_u32() as f32))
-                }
                 FState::Init(n, favg) => {
                     let favg = favg + sample;
                     self.update_f_buffers(sample);
 
-                    FState::Init(n - 1, favg)
+                    if n == 1 {
+                        FState::Integrate(favg / (FMW::to_u32() as f32))
+                    } else {
+                        FState::Init(n - 1, favg)
+                    }
                 }
                 FState::Integrate(f) => {
                     let (oldest_max, max) = self.update_f_buffers(sample);
