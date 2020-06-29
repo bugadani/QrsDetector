@@ -96,16 +96,16 @@ mod algorithms {
         }
 
         fn m(&self) -> f32 {
-            self.mm.iter().sum()
+            self.mm.iter_unordered().sum()
         }
 
         pub fn update(&mut self, sample: f32) -> Option<f32> {
             self.state = match self.state {
                 MState::Init(0, m) => {
-                    let m = 0.6 * max(m, sample);
+                    let m = 0.6 * max(m, sample) / 5.0; // divide by 5 for averaging
 
                     for _ in 0..5 {
-                        self.mm.insert(m / 5.0);
+                        self.mm.insert(m);
                     }
 
                     let n_samples = self.fs.s_to_samples(1.0);
