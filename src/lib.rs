@@ -205,8 +205,6 @@ mod algorithms {
         FMW: Size<f32>,
         FB: Size<f32>,
     {
-        /// Sampling frequency
-        fs: SamplingFrequency,
         /// F should be initialized at the same time as M is, skip earlier samples
         state: FState,
         /// 350ms of the individual max samples of the 50ms buffer
@@ -238,7 +236,6 @@ mod algorithms {
             );
 
             Self {
-                fs,
                 state: FState::Ignore(fs.s_to_samples(2.65)),
                 f_max_window: SlidingWindow::new(),
                 f_buffer: SlidingWindow::new(),
@@ -260,13 +257,13 @@ mod algorithms {
 
         pub fn update(&mut self, sample: f32) -> Option<f32> {
             self.state = match self.state {
-                FState::Ignore(1) => FState::Init(self.fs.ms_to_samples(350.0), 0.0),
+                FState::Ignore(1) => FState::Init(FMW::to_u32() - 1, 0.0),
                 FState::Ignore(n) => FState::Ignore(n - 1),
                 FState::Init(n, favg) => {
                     let favg = favg + sample;
                     self.update_f_buffers(sample);
 
-                    if n == 1 {
+                    if n == 0 {
                         FState::Integrate(favg / (FMW::to_u32() as f32))
                     } else {
                         FState::Init(n - 1, favg)
