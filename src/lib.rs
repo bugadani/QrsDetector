@@ -222,16 +222,16 @@ mod algorithms {
             // sanity check buffer sizes
             debug_assert_eq!(
                 FMW::to_u32(),
-                fs.ms_to_samples(350.0),
+                fs.ms_to_samples(300.0),
                 "Incorrect type parameters, must be <U{}, U{}>",
-                fs.ms_to_samples(350.0),
+                fs.ms_to_samples(300.0),
                 fs.ms_to_samples(50.0)
             );
             debug_assert_eq!(
                 FB::to_u32(),
                 fs.ms_to_samples(50.0),
                 "Incorrect type parameters, must be <U{}, U{}>",
-                fs.ms_to_samples(350.0),
+                fs.ms_to_samples(300.0),
                 fs.ms_to_samples(50.0)
             );
 
@@ -245,11 +245,17 @@ mod algorithms {
         fn update_f_buffers(&mut self, sample: f32) -> (Option<f32>, f32) {
             // TODO: there are some special cases where the max search can be skipped
             self.f_buffer.insert(sample);
+
+            // Calculate maximum value in the latest 50ms window
             let max = *self
                 .f_buffer
                 .iter_unordered()
                 .max_by(|a, b| a.partial_cmp(b).unwrap())
                 .unwrap();
+
+            // Keep the 50ms maximum values for each sample in latest 300ms window
+            // The oldest sample corresponds to the oldest 50ms in the latest 350ms window
+            // TODO FIXME: off by some error :)
             let old = self.f_max_window.insert(max);
 
             (old, max)

@@ -1844,7 +1844,7 @@ use qrs_detector::QrsDetector;
 
 #[test]
 fn test_simulated_signal() {
-    let mut detector: QrsDetector<U70, U10> = QrsDetector::new(200.sps());
+    let mut detector: QrsDetector<U60, U10> = QrsDetector::new(200.sps());
 
     let mut detections = 0;
     for &sample in SIGNAL {
