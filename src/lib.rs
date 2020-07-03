@@ -69,10 +69,10 @@ mod algorithms {
                     // A buffer with 5 steep-slope threshold values is preset:
                     // MM = [M1 M2 M3 M4 M5],
                     // where M1 ÷ M5 are equal to M
-                    let m = 0.6 * max(m, sample) / 5.0; // divide by 5 for averaging
+                    let m = 0.6 * max(m, sample);
 
                     for _ in 0..5 {
-                        self.mm.insert(m);
+                        self.mm.insert(m / 5.0);
                     }
 
                     // It is not clear in the article what to do initially:
