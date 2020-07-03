@@ -1,6 +1,6 @@
 [package]
 name = "qrs_detector"
-version = "0.1.2"
+version = "0.2.0"
 license = "MIT"
 repository = "https://github.com/bugadani/QrsDetector"
 description = "Realtime ECG QRS detector algorithm"
