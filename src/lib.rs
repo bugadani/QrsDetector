@@ -364,11 +364,11 @@ where
     /// ```rust
     /// use qrs_detector::sampling::*;
     /// use qrs_detector::QrsDetector;
-    /// use qrs_detector::typenum::{U175, U25};
+    /// use qrs_detector::typenum::{U150, U25};
     ///
     /// // Assuming 500 samples per second
-    /// // Type parameters must be 350ms and 50ms in number of samples
-    /// let detector: QrsDetector<U175, U25> = QrsDetector::new(500.sps());
+    /// // Type parameters must be 300ms and 50ms in number of samples
+    /// let detector: QrsDetector<U150, U25> = QrsDetector::new(500.sps());
     /// ```
     pub fn new(fs: SamplingFrequency) -> Self {
         Self {
@@ -403,6 +403,7 @@ where
                 None
             }
         };
+
         self.total_samples += 1;
         result
     }
