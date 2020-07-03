@@ -1838,6 +1838,7 @@ const SIGNAL: &[f32] = &[
     14.1232846228911,
 ];
 
+use if_chain::if_chain;
 use qrs_detector::sampling::*;
 use qrs_detector::typenum::*;
 use qrs_detector::QrsDetector;
@@ -1847,9 +1848,17 @@ fn test_simulated_signal() {
     let mut detector: QrsDetector<U60, U10> = QrsDetector::new(200.sps());
 
     let mut detections = 0;
+    let mut prev: Option<f32> = None;
+    let mut prev2: Option<f32> = None;
+
     for &sample in SIGNAL {
-        if let Some(_) = detector.update(sample) {
-            detections += 1;
+        if_chain! {
+            if let Some(p) = prev.replace(sample);
+            if let Some(p2) = prev2.replace(p);
+            if let Some(_) = detector.update((p2 - sample).abs());
+            then {
+                detections += 1;
+            }
         }
     }
 

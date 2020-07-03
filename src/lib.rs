@@ -10,10 +10,6 @@
 #![cfg_attr(not(test), no_std)]
 
 mod internal {
-    use micromath::F32Ext;
-
-    use sliding_window::{typenum::consts::U2, SlidingWindow};
-
     pub fn max(a: f32, b: f32) -> f32 {
         if a > b {
             a
@@ -21,47 +17,11 @@ mod internal {
             b
         }
     }
-
-    pub struct Differentiator {
-        window: SlidingWindow<f32, U2>,
-    }
-
-    impl Differentiator {
-        pub fn new() -> Self {
-            Self {
-                window: SlidingWindow::new(),
-            }
-        }
-
-        pub fn update(&mut self, sample: f32) -> Option<f32> {
-            self.window.insert(sample).map(|old| (sample - old).abs())
-        }
-    }
-
-    #[cfg(test)]
-    mod test_diff {
-        use super::Differentiator;
-
-        #[test]
-        fn sanity_check() {
-            let mut diff = Differentiator::new();
-
-            assert_eq!(None, diff.update(1.0));
-            assert_eq!(None, diff.update(2.0));
-            assert_eq!(Some(2.0), diff.update(3.0));
-            assert_eq!(Some(2.0), diff.update(4.0));
-            assert_eq!(Some(0.0), diff.update(3.0));
-            assert_eq!(Some(1.0), diff.update(3.0));
-            assert_eq!(Some(1.0), diff.update(2.0));
-            assert_eq!(Some(2.0), diff.update(1.0));
-        }
-    }
 }
 
 use if_chain::if_chain;
 use sliding_window::Size;
 
-use internal::Differentiator;
 pub use sliding_window::typenum;
 
 mod algorithms {
@@ -383,7 +343,6 @@ where
     FB: Size<f32>,
 {
     fs: SamplingFrequency,
-    differentiator: Differentiator,
     total_samples: u32,
     m: M,
     f: F<FMW, FB>,
@@ -415,7 +374,6 @@ where
         Self {
             fs,
             total_samples: 0,
-            differentiator: Differentiator::new(),
             m: M::new(fs),
             f: F::new(fs),
             r: R::new(),
@@ -428,28 +386,24 @@ where
     }
 
     /// Process a sample. Returns Some sample index if a QRS complex is detected.
-    pub fn update(&mut self, input: f32) -> Option<u32> {
-        let result = self.differentiator.update(input).and_then(|sample| {
-            let m = self.m.update(sample);
-            let f = self.f.update(sample);
-            let r = self.r.update(self.m.current_decrement);
+    pub fn update(&mut self, sample: f32) -> Option<u32> {
+        let m = self.m.update(sample);
+        let f = self.f.update(sample);
+        let r = self.r.update(self.m.current_decrement);
 
-            if_chain! {
-                if let Some(m) = m;
-                if let Some(f) = f;
-                if sample > m + f + r;
-                then {
-                    self.m.detection_event(sample);
-                    self.r.detection_event(self.total_samples);
-                    Some(self.total_samples)
-                } else {
-                    None
-                }
+        let result = if_chain! {
+            if let Some(m) = m;
+            if let Some(f) = f;
+            if sample > m + f + r;
+            then {
+                self.m.detection_event(sample);
+                self.r.detection_event(self.total_samples);
+                Some(self.total_samples)
+            } else {
+                None
             }
-        });
-
+        };
         self.total_samples += 1;
-
         result
     }
 }
