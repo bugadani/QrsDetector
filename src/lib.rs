@@ -124,7 +124,11 @@ mod algorithms {
                 // In the interval QRS ÷ QRS+200ms a new value of M5 is calculated:
                 // newM 5 = 0.6*max(Yi)
                 // Collect maximum value while in Disallow state
-                MState::Disallow(samples, m) => MState::Disallow(samples - 1, max(m, sample)),
+                MState::Disallow(samples, m) if sample > m => {
+                    // if we found a new maximum, extend the disallow period
+                    MState::Disallow(samples.max(self.fs.s_to_samples(0.2)), sample)
+                }
+                MState::Disallow(samples, m) => MState::Disallow(samples - 1, m),
 
                 // After 1225 ms [originally 1200 ms] M remains unchanged.
                 MState::Decreasing(0, m, _) => MState::ConstantLow(m),
