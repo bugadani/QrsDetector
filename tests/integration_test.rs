@@ -1,13 +1,10 @@
 use if_chain::if_chain;
 use qrs_detector::sampling::*;
-use qrs_detector::typenum::*;
 use qrs_detector::QrsDetector;
-
-use sliding_window::SlidingWindow;
 
 #[test]
 fn test_simulated_signal() {
-    let mut detector: QrsDetector<U216, U36> = QrsDetector::new(720.sps());
+    let mut detector: QrsDetector<216, 36> = QrsDetector::new(720.sps());
 
     let mut detections = 0;
     let mut prev: Option<f32> = None;
@@ -15,14 +12,14 @@ fn test_simulated_signal() {
 
     let data = include_str!("./data/aami3a.txt");
 
-    let mut window: SlidingWindow<f32, U4> = SlidingWindow::new();
+    let samples = data
+        .split_terminator('\n')
+        .map(|str| str.trim().parse::<f32>().unwrap())
+        .collect::<Vec<_>>();
 
-    for sample_str in data.split_terminator('\n') {
-        let sample: f32 = sample_str.trim().parse().unwrap();
-
+    for window in samples.windows(4) {
         // A slight moving average filtering
-        window.insert(sample);
-        let sum: f32 = window.iter_unordered().sum();
+        let sum = window.iter().sum::<f32>();
         let avg = sum / 4.0;
         if_chain! {
             if let Some(p) = prev.replace(avg);

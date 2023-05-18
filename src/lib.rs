@@ -19,16 +19,12 @@ mod internal {
     }
 }
 
-use if_chain::if_chain;
-use sliding_window::Size;
+mod sliding;
 
-pub use sliding_window::typenum;
+use if_chain::if_chain;
 
 mod algorithms {
-    use sliding_window::{typenum::consts::U5, Size, SlidingWindow};
-
-    use crate::internal::max;
-    use crate::sampling::*;
+    use crate::{internal::max, sampling::*, sliding::SlidingWindow};
 
     #[derive(Copy, Clone, Debug)]
     pub enum MState {
@@ -40,7 +36,7 @@ mod algorithms {
 
     pub struct M {
         state: MState,
-        mm: SlidingWindow<f32, U5>,
+        mm: SlidingWindow<f32, 5>,
         fs: SamplingFrequency,
         pub current_decrement: f32,
     }
@@ -59,7 +55,7 @@ mod algorithms {
         fn m(&self) -> f32 {
             // M is calculated as an average value of MM.
             // Divide by 5 was done while calculating the individual Mx values
-            self.mm.iter_unordered().sum()
+            self.mm.iter().sum()
         }
 
         pub fn update(&mut self, sample: f32) -> Option<f32> {
@@ -72,7 +68,7 @@ mod algorithms {
                     let m = 0.6 * max(m, sample);
 
                     for _ in 0..5 {
-                        self.mm.insert(m / 5.0);
+                        self.mm.push(m / 5.0);
                     }
 
                     // It is not clear in the article what to do initially:
@@ -102,11 +98,11 @@ mod algorithms {
                     // The estimated newM 5 value can become quite high, if steep slope premature
                     // ventricular contraction or artifact appeared, and for that reason it is
                     // limited to newM5 = 1.1* M5 if newM 5 > 1.5* M5.
-                    let prev_m = self.mm[4];
+                    let prev_m = self.mm.last().unwrap_or(0.0);
                     if m > prev_m * 1.5 {
-                        self.mm.insert(1.1 * prev_m);
+                        self.mm.push(1.1 * prev_m);
                     } else {
-                        self.mm.insert(m);
+                        self.mm.push(m);
                     }
 
                     let m = self.m();
@@ -164,37 +160,29 @@ mod algorithms {
         Integrate(f32),
     }
 
-    pub struct F<FMW, FB>
-    where
-        FMW: Size<f32>,
-        FB: Size<f32>,
-    {
+    pub struct F<const SAMPLES_350: usize, const SAMPLES_50: usize> {
         /// F should be initialized at the same time as M is, skip earlier samples
         state: FState,
         /// 350ms of the individual max samples of the 50ms buffer
-        f_max_window: SlidingWindow<f32, FMW>,
+        f_max_window: SlidingWindow<f32, SAMPLES_350>,
         /// 50ms window of the signal
-        f_buffer: SlidingWindow<f32, FB>,
+        f_buffer: SlidingWindow<f32, SAMPLES_50>,
     }
 
-    impl<FMW, FB> F<FMW, FB>
-    where
-        FMW: Size<f32>,
-        FB: Size<f32>,
-    {
+    impl<const SAMPLES_350: usize, const SAMPLES_50: usize> F<SAMPLES_350, SAMPLES_50> {
         pub fn new(fs: SamplingFrequency) -> Self {
             // sanity check buffer sizes
             debug_assert_eq!(
-                FMW::to_u32(),
+                SAMPLES_350 as u32,
                 fs.ms_to_samples(300.0),
-                "Incorrect type parameters, must be <U{}, U{}>",
+                "Incorrect type parameters, must be <{}, {}>",
                 fs.ms_to_samples(300.0),
                 fs.ms_to_samples(50.0)
             );
             debug_assert_eq!(
-                FB::to_u32(),
+                SAMPLES_50 as u32,
                 fs.ms_to_samples(50.0),
-                "Incorrect type parameters, must be <U{}, U{}>",
+                "Incorrect type parameters, must be <{}, {}>",
                 fs.ms_to_samples(300.0),
                 fs.ms_to_samples(50.0)
             );
@@ -208,33 +196,33 @@ mod algorithms {
 
         fn update_f_buffers(&mut self, sample: f32) -> (Option<f32>, f32) {
             // TODO: there are some special cases where the max search can be skipped
-            self.f_buffer.insert(sample);
+            self.f_buffer.push(sample);
 
             // Calculate maximum value in the latest 50ms window
-            let max = *self
+            let max = self
                 .f_buffer
-                .iter_unordered()
+                .iter()
                 .max_by(|a, b| a.partial_cmp(b).unwrap())
                 .unwrap();
 
             // Keep the 50ms maximum values for each sample in latest 300ms window
             // The oldest sample corresponds to the oldest 50ms in the latest 350ms window
             // TODO FIXME: off by some error :)
-            let old = self.f_max_window.insert(max);
+            let old = self.f_max_window.push(max);
 
             (old, max)
         }
 
         pub fn update(&mut self, sample: f32) -> Option<f32> {
             self.state = match self.state {
-                FState::Ignore(1) => FState::Init(FMW::to_u32() - 1, 0.0),
+                FState::Ignore(1) => FState::Init(SAMPLES_350 as u32 - 1, 0.0),
                 FState::Ignore(n) => FState::Ignore(n - 1),
                 FState::Init(n, favg) => {
                     let favg = favg + sample;
                     self.update_f_buffers(sample);
 
                     if n == 0 {
-                        FState::Integrate(favg / (FMW::to_u32() as f32))
+                        FState::Integrate(favg / (SAMPLES_350 as f32))
                     } else {
                         FState::Init(n - 1, favg)
                     }
@@ -264,7 +252,7 @@ mod algorithms {
 
     pub struct R {
         state: RState,
-        rr: SlidingWindow<u32, U5>,
+        rr: SlidingWindow<u32, 5>,
         prev_idx: u32, // no need to make it an Option
     }
 
@@ -306,13 +294,13 @@ mod algorithms {
             match self.state {
                 RState::Ignore => self.state = RState::InitBuffer,
                 RState::InitBuffer => {
-                    self.rr.insert(idx.wrapping_sub(self.prev_idx));
+                    self.rr.push(idx.wrapping_sub(self.prev_idx));
                     if self.rr.is_full() {
                         self.enter_no_decrease();
                     }
                 }
                 _ => {
-                    self.rr.insert(idx.wrapping_sub(self.prev_idx));
+                    self.rr.push(idx.wrapping_sub(self.prev_idx));
                     self.enter_no_decrease();
                 }
             };
@@ -336,28 +324,20 @@ use algorithms::{F, M, R};
 /// This has an unfortunate implementation detail where the internal buffer sizes must be set on
 /// the type level.
 ///
-/// - `FMW` - number of samples representing 350ms, as [`typenum::U*`](../typenum/consts/index.html)
-/// - `FB` - number of samples representing 50ms, as [`typenum::U*`](../typenum/consts/index.html)
+/// - `FMW` - number of samples representing 350ms
+/// - `FB` - number of samples representing 50ms
 ///
 /// These type parameters are checked at runtime and if incorrect and the error message will contain
 /// the correct sizes.
-pub struct QrsDetector<FMW, FB>
-where
-    FMW: Size<f32>,
-    FB: Size<f32>,
-{
+pub struct QrsDetector<const SAMPLES_350: usize, const SAMPLES_50: usize> {
     fs: SamplingFrequency,
     total_samples: u32,
     m: M,
-    f: F<FMW, FB>,
+    f: F<SAMPLES_350, SAMPLES_50>,
     r: R,
 }
 
-impl<FMW, FB> QrsDetector<FMW, FB>
-where
-    FMW: Size<f32>,
-    FB: Size<f32>,
-{
+impl<const SAMPLES_350: usize, const SAMPLES_50: usize> QrsDetector<SAMPLES_350, SAMPLES_50> {
     /// Returns a new QRS detector for signals sampled at `fs` sampling frequency.
     ///
     /// # Arguments
@@ -368,11 +348,10 @@ where
     /// ```rust
     /// use qrs_detector::sampling::*;
     /// use qrs_detector::QrsDetector;
-    /// use qrs_detector::typenum::{U150, U25};
     ///
     /// // Assuming 500 samples per second
     /// // Type parameters must be 300ms and 50ms in number of samples
-    /// let detector: QrsDetector<U150, U25> = QrsDetector::new(500.sps());
+    /// let detector: QrsDetector<150, 25> = QrsDetector::new(500.sps());
     /// ```
     pub fn new(fs: SamplingFrequency) -> Self {
         Self {
