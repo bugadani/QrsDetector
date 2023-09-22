@@ -12,7 +12,6 @@ impl<T: Default + Copy, const N: usize> Default for SlidingWindow<T, N> {
     }
 }
 
-#[allow(dead_code)]
 impl<T: Copy, const N: usize> SlidingWindow<T, N> {
     pub fn new() -> Self
     where
@@ -25,14 +24,7 @@ impl<T: Copy, const N: usize> SlidingWindow<T, N> {
         }
     }
 
-    pub fn from_initial(buffer: [T; N]) -> Self {
-        Self {
-            buffer,
-            idx: 0,
-            full: true,
-        }
-    }
-
+    #[allow(dead_code)]
     pub fn clear(&mut self) {
         self.idx = 0;
         self.full = false;
@@ -55,6 +47,7 @@ impl<T: Copy, const N: usize> SlidingWindow<T, N> {
         }
     }
 
+    #[allow(dead_code)]
     pub fn is_empty(&self) -> bool {
         self.len() == 0
     }
@@ -75,10 +68,7 @@ impl<T: Copy, const N: usize> SlidingWindow<T, N> {
         old
     }
 
-    pub fn iter(&self) -> impl Iterator<Item = T> + Clone + '_ {
-        (self.idx..self.buffer.len())
-            .chain(0..self.idx)
-            .map(|i| self.buffer[i])
-            .take(self.len())
+    pub fn iter_unordered(&self) -> impl Iterator<Item = T> + Clone + '_ {
+        (0..self.len()).map(|i| self.buffer[i])
     }
 }

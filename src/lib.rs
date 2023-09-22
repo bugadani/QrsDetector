@@ -1,328 +1,21 @@
 //! This crate provides a realtime ECG QRS detector.
 //!
 //! The implementation is based on [this article](https://biomedical-engineering-online.biomedcentral.com/articles/10.1186/1475-925X-3-28).
-//!
-//! `QrsDetector` does not use dynamic memory allocation. Instead, this crate relies on
-//! [`generic_array`](../generic_array/index.html),
-//! which means there's a bit of setup necessary to set the size of internal buffers.
-//!
-//! For more information, see [`QrsDetector`](./struct.QrsDetector.html).
 #![cfg_attr(not(test), no_std)]
 
-mod internal {
-    pub fn max(a: f32, b: f32) -> f32 {
-        if a > b {
-            a
-        } else {
-            b
-        }
-    }
-}
-
+mod algorithms;
+pub mod sampling;
 mod sliding;
 
+use algorithms::{F, M, R};
 use if_chain::if_chain;
-
-mod algorithms {
-    use crate::{internal::max, sampling::*, sliding::SlidingWindow};
-
-    #[derive(Copy, Clone, Debug)]
-    pub enum MState {
-        Init(u32, f32),
-        Disallow(u32, f32),
-        Decreasing(u32, f32, f32),
-        ConstantLow(f32),
-    }
-
-    pub struct M {
-        state: MState,
-        mm: SlidingWindow<f32, 5>,
-        fs: SamplingFrequency,
-        pub current_decrement: f32,
-    }
-
-    impl M {
-        pub fn new(fs: SamplingFrequency) -> Self {
-            Self {
-                fs,
-                mm: SlidingWindow::new(),
-                // Initially M = 0.6*max(Y) is set for the first 3 s [originally 5s] of the signal
-                state: MState::Init(fs.s_to_samples(3.0), 0.0),
-                current_decrement: 0.0,
-            }
-        }
-
-        fn m(&self) -> f32 {
-            // M is calculated as an average value of MM.
-            // Divide by 5 was done while calculating the individual Mx values
-            self.mm.iter().sum()
-        }
-
-        pub fn update(&mut self, sample: f32) -> Option<f32> {
-            self.state = match self.state {
-                MState::Init(0, m) => {
-                    // Initially M = 0.6*max(Y) is set for the first 3 s [originally 5s] of the signal
-                    // A buffer with 5 steep-slope threshold values is preset:
-                    // MM = [M1 M2 M3 M4 M5],
-                    // where M1 ÷ M5 are equal to M
-                    let m = 0.6 * max(m, sample);
-
-                    for _ in 0..5 {
-                        self.mm.push(m / 5.0);
-                    }
-
-                    // It is not clear in the article what to do initially:
-                    // - wait for a QRS detection and then start the M algorithm with Disallow state
-                    // - decrease using "low slope" immediately
-                    // This implementation uses the second option
-
-                    // M is decreased in an interval 225 to 1225 ms [originally 200 to 1200 ms]
-                    // following the last QRS detection at a low slope, reaching 60 % of its
-                    // refreshed value at 1225 ms [originally 1200 ms].
-                    let n_samples = self.fs.s_to_samples(1.0);
-                    let decrement = m * 0.4 / n_samples as f32;
-                    self.current_decrement = decrement;
-
-                    MState::Decreasing(n_samples, m, decrement)
-                }
-
-                // Initially M = 0.6*max(Y) is set for the first 3 s [originally 5s] of the signal
-                // Collect maximum value while in Init state
-                MState::Init(samples, m) => MState::Init(samples - 1, max(m, sample)),
-
-                MState::Disallow(0, m) => {
-                    // In the interval QRS ÷ QRS+200ms a new value of M5 is calculated:
-                    // newM 5 = 0.6*max(Yi)
-                    let m = 0.6 * max(m, sample) / 5.0; // divide by 5 for averaging
-
-                    // The estimated newM 5 value can become quite high, if steep slope premature
-                    // ventricular contraction or artifact appeared, and for that reason it is
-                    // limited to newM5 = 1.1* M5 if newM 5 > 1.5* M5.
-                    let prev_m = self.mm.last().unwrap_or(0.0);
-                    if m > prev_m * 1.5 {
-                        self.mm.push(1.1 * prev_m);
-                    } else {
-                        self.mm.push(m);
-                    }
-
-                    let m = self.m();
-
-                    // M is decreased in an interval 225 to 1225 ms [originally 200 to 1200 ms]
-                    // following the last QRS detection at a low slope, reaching 60 % of its
-                    // refreshed value at 1225 ms [originally 1200 ms].
-                    let n_samples = self.fs.s_to_samples(1.0);
-                    let decrement = m * 0.4 / n_samples as f32;
-                    self.current_decrement = decrement;
-
-                    MState::Decreasing(n_samples, m, decrement)
-                }
-
-                // In the interval QRS ÷ QRS+200ms a new value of M5 is calculated:
-                // newM 5 = 0.6*max(Yi)
-                // Collect maximum value while in Disallow state
-                MState::Disallow(samples, m) if sample > m => {
-                    // if we found a new maximum, extend the disallow period
-                    MState::Disallow(samples.max(self.fs.s_to_samples(0.2)), sample)
-                }
-                MState::Disallow(samples, m) => MState::Disallow(samples - 1, m),
-
-                // After 1225 ms [originally 1200 ms] M remains unchanged.
-                MState::Decreasing(0, m, _) => MState::ConstantLow(m),
-
-                // M is decreased in an interval 225 to 1225 ms [originally 200 to 1200 ms]
-                // following the last QRS detection at a low slope, reaching 60 % of its
-                // refreshed value at 1225 ms [originally 1200 ms].
-                MState::Decreasing(samples, m, decrease_amount) => {
-                    // Linear decrease using precomputed decrement value
-                    MState::Decreasing(samples - 1, m - decrease_amount, decrease_amount)
-                }
-
-                // After 1225 ms [originally 1200 ms] M remains unchanged.
-                MState::ConstantLow(m) => MState::ConstantLow(m),
-            };
-
-            match self.state {
-                MState::Init(_, _) | MState::Disallow(_, _) => None,
-                MState::Decreasing(_, m, _) | MState::ConstantLow(m) => Some(m),
-            }
-        }
-
-        pub fn detection_event(&mut self, sample: f32) {
-            // No detection is allowed 225 ms [originally 200 ms] after the current one.
-            self.state = MState::Disallow(self.fs.s_to_samples(0.225), sample);
-        }
-    }
-
-    #[derive(Copy, Clone, Debug)]
-    pub enum FState {
-        Ignore(u32),
-        Init(u32, f32),
-        Integrate(f32),
-    }
-
-    pub struct F<const SAMPLES_350: usize, const SAMPLES_50: usize> {
-        /// F should be initialized at the same time as M is, skip earlier samples
-        state: FState,
-        /// 350ms of the individual max samples of the 50ms buffer
-        f_max_window: SlidingWindow<f32, SAMPLES_350>,
-        /// 50ms window of the signal
-        f_buffer: SlidingWindow<f32, SAMPLES_50>,
-    }
-
-    impl<const SAMPLES_350: usize, const SAMPLES_50: usize> F<SAMPLES_350, SAMPLES_50> {
-        pub fn new(fs: SamplingFrequency) -> Self {
-            // sanity check buffer sizes
-            debug_assert_eq!(
-                SAMPLES_350 as u32,
-                fs.ms_to_samples(300.0),
-                "Incorrect type parameters, must be <{}, {}>",
-                fs.ms_to_samples(300.0),
-                fs.ms_to_samples(50.0)
-            );
-            debug_assert_eq!(
-                SAMPLES_50 as u32,
-                fs.ms_to_samples(50.0),
-                "Incorrect type parameters, must be <{}, {}>",
-                fs.ms_to_samples(300.0),
-                fs.ms_to_samples(50.0)
-            );
-
-            Self {
-                state: FState::Ignore(fs.s_to_samples(2.65)),
-                f_max_window: SlidingWindow::new(),
-                f_buffer: SlidingWindow::new(),
-            }
-        }
-
-        fn update_f_buffers(&mut self, sample: f32) -> (Option<f32>, f32) {
-            // TODO: there are some special cases where the max search can be skipped
-            self.f_buffer.push(sample);
-
-            // Calculate maximum value in the latest 50ms window
-            let max = self
-                .f_buffer
-                .iter()
-                .max_by(|a, b| a.partial_cmp(b).unwrap())
-                .unwrap();
-
-            // Keep the 50ms maximum values for each sample in latest 300ms window
-            // The oldest sample corresponds to the oldest 50ms in the latest 350ms window
-            // TODO FIXME: off by some error :)
-            let old = self.f_max_window.push(max);
-
-            (old, max)
-        }
-
-        pub fn update(&mut self, sample: f32) -> Option<f32> {
-            self.state = match self.state {
-                FState::Ignore(1) => FState::Init(SAMPLES_350 as u32 - 1, 0.0),
-                FState::Ignore(n) => FState::Ignore(n - 1),
-                FState::Init(n, favg) => {
-                    let favg = favg + sample;
-                    self.update_f_buffers(sample);
-
-                    if n == 0 {
-                        FState::Integrate(favg / (SAMPLES_350 as f32))
-                    } else {
-                        FState::Init(n - 1, favg)
-                    }
-                }
-                FState::Integrate(f) => {
-                    let (oldest_max, max) = self.update_f_buffers(sample);
-                    FState::Integrate(f + (max - oldest_max.unwrap()) / 150.0)
-                }
-            };
-
-            if let FState::Integrate(f) = self.state {
-                Some(f)
-            } else {
-                None
-            }
-        }
-    }
-
-    #[derive(Copy, Clone, Debug)]
-    pub enum RState {
-        Ignore,
-        InitBuffer,
-        NoDecrease(u32, u32),    // samples remaining, average rr interval
-        Decrease(u32, f32, f32), // samples remaining, value, decrement
-        Constant(f32),
-    }
-
-    pub struct R {
-        state: RState,
-        rr: SlidingWindow<u32, 5>,
-        prev_idx: u32, // no need to make it an Option
-    }
-
-    impl R {
-        pub fn new() -> Self {
-            Self {
-                state: RState::Ignore,
-                rr: SlidingWindow::new(),
-                prev_idx: 0,
-            }
-        }
-
-        fn enter_no_decrease(&mut self) {
-            let rr_sum: u32 = self.rr.iter().sum();
-            let rr_avg = rr_sum / 5;
-            self.state = RState::NoDecrease(rr_avg * 2 / 3, rr_avg);
-        }
-
-        pub fn update(&mut self, m_decrement: f32) -> f32 {
-            self.state = match self.state {
-                RState::NoDecrease(0, rr_avg) => {
-                    RState::Decrease(rr_avg / 3, 0.0, m_decrement / 1.4)
-                }
-                RState::NoDecrease(samples, rr_avg) => RState::NoDecrease(samples - 1, rr_avg),
-                RState::Decrease(0, r, _) => RState::Constant(r),
-                RState::Decrease(samples, r, decrement) => {
-                    RState::Decrease(samples - 1, r - decrement, decrement)
-                }
-                o => o,
-            };
-
-            match self.state {
-                RState::Ignore | RState::InitBuffer | RState::NoDecrease(_, _) => 0.0,
-                RState::Constant(r) | RState::Decrease(_, r, _) => r,
-            }
-        }
-
-        pub fn detection_event(&mut self, idx: u32) {
-            match self.state {
-                RState::Ignore => self.state = RState::InitBuffer,
-                RState::InitBuffer => {
-                    self.rr.push(idx.wrapping_sub(self.prev_idx));
-                    if self.rr.is_full() {
-                        self.enter_no_decrease();
-                    }
-                }
-                _ => {
-                    self.rr.push(idx.wrapping_sub(self.prev_idx));
-                    self.enter_no_decrease();
-                }
-            };
-
-            self.prev_idx = idx;
-        }
-    }
-}
-
-/// Helpers for working with sampling frequencies and sample numbers.
-pub mod sampling;
 use sampling::SamplingFrequency;
 
-use algorithms::{F, M, R};
-
-/// Find QRS complex in real-time sampled ECG signal.
+/// Finds QRS complexes in real-time sampled ECG signal.
 ///
 /// # Type parameters:
 ///
-/// The `QrsDetector` is built upon [`generic_array`](../generic_array/index.html).
-/// This has an unfortunate implementation detail where the internal buffer sizes must be set on
-/// the type level.
+/// The internal buffer sizes must be set on the type level.
 ///
 /// - `FMW` - number of samples representing 350ms
 /// - `FB` - number of samples representing 50ms
@@ -363,12 +56,12 @@ impl<const SAMPLES_350: usize, const SAMPLES_50: usize> QrsDetector<SAMPLES_350,
         }
     }
 
-    /// Reset the internal state of the detector
+    /// Resets the internal state of the detector.
     pub fn clear(&mut self) {
         *self = Self::new(self.fs);
     }
 
-    /// Process a sample. Returns Some sample index if a QRS complex is detected.
+    /// Processes a sample. Returns Some sample index if a QRS complex is detected.
     pub fn update(&mut self, sample: f32) -> Option<u32> {
         let m = self.m.update(sample);
         let f = self.f.update(sample);

@@ -1,5 +1,7 @@
-#[derive(Clone, Copy)]
-pub struct SamplingFrequency(pub f32);
+//! Helpers for working with sampling frequencies and sample numbers.
+
+#[derive(Clone, Copy, Debug, PartialEq, PartialOrd)]
+pub struct SamplingFrequency(f32);
 
 /// Extension functions for numeric types used to create [`SamplingFrequency`] values.
 ///
@@ -46,8 +48,8 @@ impl SamplingFrequency {
     /// let samples = 500.sps().s_to_samples(2.5);
     /// assert_eq!(samples, 1250);
     /// ```
-    pub fn ms_to_samples(self, ms: f32) -> u32 {
-        ((ms * self.0) as u32) / 1000
+    pub fn ms_to_samples(self, ms: f32) -> usize {
+        ((ms * self.0) as usize) / 1000
     }
 
     /// Convert `s` seconds to number of samples
@@ -57,7 +59,7 @@ impl SamplingFrequency {
     /// let samples = 500.sps().ms_to_samples(500.0);
     /// assert_eq!(samples, 250);
     /// ```
-    pub fn s_to_samples(self, s: f32) -> u32 {
+    pub fn s_to_samples(self, s: f32) -> usize {
         self.ms_to_samples(s * 1000.0)
     }
 }
