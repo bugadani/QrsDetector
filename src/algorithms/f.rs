@@ -69,14 +69,14 @@ impl<const SAMPLES_350: usize, const SAMPLES_50: usize> F<SAMPLES_350, SAMPLES_5
                 self.update_f_buffers(sample);
 
                 if n == 0 {
-                    FState::Integrate(favg / (SAMPLES_350 as f32))
+                    FState::Integrate(favg.max(0.0) / (SAMPLES_350 as f32))
                 } else {
                     FState::Init(n - 1, favg)
                 }
             }
             FState::Integrate(f) => {
                 let (oldest_max, max) = self.update_f_buffers(sample);
-                FState::Integrate(f + (max - oldest_max.unwrap()) / 150.0)
+                FState::Integrate((f + (max - oldest_max.unwrap()) / 150.0).max(0.0))
             }
         };
     }
