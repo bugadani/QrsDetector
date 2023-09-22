@@ -8,7 +8,6 @@ pub mod sampling;
 mod sliding;
 
 use algorithms::{F, M, R};
-use if_chain::if_chain;
 use sampling::SamplingFrequency;
 
 /// Finds QRS complexes in real-time sampled ECG signal.
@@ -20,7 +19,7 @@ use sampling::SamplingFrequency;
 /// - `FMW` - number of samples representing 350ms
 /// - `FB` - number of samples representing 50ms
 ///
-/// These type parameters are checked at runtime and if incorrect and the error message will contain
+/// These type parameters are checked at runtime and, if incorrect, the error message will contain
 /// the correct sizes.
 pub struct QrsDetector<const SAMPLES_350: usize, const SAMPLES_50: usize> {
     fs: SamplingFrequency,
@@ -63,24 +62,50 @@ impl<const SAMPLES_350: usize, const SAMPLES_50: usize> QrsDetector<SAMPLES_350,
 
     /// Processes a sample. Returns Some sample index if a QRS complex is detected.
     pub fn update(&mut self, sample: f32) -> Option<u32> {
-        let m = self.m.update(sample);
-        let f = self.f.update(sample);
-        let r = self.r.update(self.m.current_decrement);
+        self.m.update(sample);
+        self.f.update(sample);
+        self.r.update(self.m.current_decrement);
 
-        let result = if_chain! {
-            if let Some(m) = m;
-            if let Some(f) = f;
-            if sample > m + f + r;
-            then {
+        let thresholds = self.thresholds();
+
+        let result = match thresholds.total() {
+            Some(mfr) if sample > mfr => {
                 self.m.detection_event(sample);
                 self.r.detection_event(self.total_samples);
                 Some(self.total_samples)
-            } else {
-                None
             }
+            _ => None,
         };
 
         self.total_samples += 1;
         result
+    }
+
+    /// Returns the current threshold value.
+    /// This value is used to determine if a sample is a QRS complex.
+    /// The final threshold is calculated as `M + F + R`.
+    pub fn thresholds(&self) -> Thresholds {
+        Thresholds {
+            m: self.m.threshold(),
+            f: self.f.threshold(),
+            r: self.r.threshold(),
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct Thresholds {
+    pub m: Option<f32>,
+    pub f: Option<f32>,
+    pub r: f32,
+}
+
+impl Thresholds {
+    pub fn total(&self) -> Option<f32> {
+        if let (Some(m), Some(f)) = (self.m, self.f) {
+            Some(m + f + self.r)
+        } else {
+            None
+        }
     }
 }

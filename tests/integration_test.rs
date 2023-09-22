@@ -1,4 +1,3 @@
-use if_chain::if_chain;
 use qrs_detector::sampling::*;
 use qrs_detector::QrsDetector;
 
@@ -21,12 +20,11 @@ fn test_simulated_signal() {
         // A slight moving average filtering
         let sum = window.iter().sum::<f32>();
         let avg = sum / 4.0;
-        if_chain! {
-            if let Some(p) = prev.replace(avg);
-            if let Some(p2) = prev2.replace(p);
-            if let Some(_) = detector.update((p2 - avg).abs());
-            then {
-                detections += 1;
+        if let Some(p) = prev.replace(avg) {
+            if let Some(p2) = prev2.replace(p) {
+                if let Some(_) = detector.update((p2 - avg).abs()) {
+                    detections += 1;
+                }
             }
         }
     }

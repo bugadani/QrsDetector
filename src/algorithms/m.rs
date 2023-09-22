@@ -32,7 +32,7 @@ impl M {
         self.mm.iter_unordered().sum()
     }
 
-    pub fn update(&mut self, sample: f32) -> Option<f32> {
+    pub fn update(&mut self, sample: f32) {
         self.state = match self.state {
             MState::Init(0, m) => {
                 // Initially M = 0.6*max(Y) is set for the first 3 s [originally 5s] of the signal
@@ -114,7 +114,9 @@ impl M {
             // After 1225 ms [originally 1200 ms] M remains unchanged.
             MState::ConstantLow(m) => MState::ConstantLow(m),
         };
+    }
 
+    pub fn threshold(&self) -> Option<f32> {
         match self.state {
             MState::Init(_, _) | MState::Disallow(_, _) => None,
             MState::Decreasing(_, m, _) | MState::ConstantLow(m) => Some(m),

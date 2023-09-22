@@ -3,6 +3,7 @@ Unreleased
 
  * **breaking:** Replaced `typenum` with const generics.
  * `SamplingFrequency` internal field is no longer accessible.
+ * Added `Thresholds`, `QrsDetector::thresholds()`
 
 0.2.0
 ==========

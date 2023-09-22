@@ -30,7 +30,7 @@ impl R {
         self.state = RState::NoDecrease(rr_avg * 2 / 3, rr_avg);
     }
 
-    pub fn update(&mut self, m_decrement: f32) -> f32 {
+    pub fn update(&mut self, m_decrement: f32) {
         self.state = match self.state {
             RState::NoDecrease(0, rr_avg) => RState::Decrease(rr_avg / 3, 0.0, m_decrement / 1.4),
             RState::NoDecrease(samples, rr_avg) => RState::NoDecrease(samples - 1, rr_avg),
@@ -40,7 +40,9 @@ impl R {
             }
             o => o,
         };
+    }
 
+    pub fn threshold(&self) -> f32 {
         match self.state {
             RState::Ignore | RState::InitBuffer | RState::NoDecrease(_, _) => 0.0,
             RState::Constant(r) | RState::Decrease(_, r, _) => r,

@@ -60,7 +60,7 @@ impl<const SAMPLES_350: usize, const SAMPLES_50: usize> F<SAMPLES_350, SAMPLES_5
         (old, max)
     }
 
-    pub fn update(&mut self, sample: f32) -> Option<f32> {
+    pub fn update(&mut self, sample: f32) {
         self.state = match self.state {
             FState::Ignore(1) => FState::Init(SAMPLES_350 - 1, 0.0),
             FState::Ignore(n) => FState::Ignore(n - 1),
@@ -79,7 +79,9 @@ impl<const SAMPLES_350: usize, const SAMPLES_50: usize> F<SAMPLES_350, SAMPLES_5
                 FState::Integrate(f + (max - oldest_max.unwrap()) / 150.0)
             }
         };
+    }
 
+    pub fn threshold(&self) -> Option<f32> {
         if let FState::Integrate(f) = self.state {
             Some(f)
         } else {

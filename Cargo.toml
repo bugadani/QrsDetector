@@ -14,4 +14,3 @@ exclude = [
 
 [dependencies]
 micromath = "^2.0.0"
-if_chain = "1.0.0"
