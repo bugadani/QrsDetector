@@ -16,20 +16,20 @@ use sampling::SamplingFrequency;
 ///
 /// The internal buffer sizes must be set on the type level.
 ///
-/// - `FMW` - number of samples representing 350ms
-/// - `FB` - number of samples representing 50ms
+/// - `SAMPLES_300` - number of samples representing 300ms
+/// - `SAMPLES_50` - number of samples representing 50ms
 ///
 /// These type parameters are checked at runtime and, if incorrect, the error message will contain
 /// the correct sizes.
-pub struct QrsDetector<const SAMPLES_350: usize, const SAMPLES_50: usize> {
+pub struct QrsDetector<const SAMPLES_300: usize, const SAMPLES_50: usize> {
     fs: SamplingFrequency,
     total_samples: u32,
     m: M,
-    f: F<SAMPLES_350, SAMPLES_50>,
+    f: F<SAMPLES_300, SAMPLES_50>,
     r: R,
 }
 
-impl<const SAMPLES_350: usize, const SAMPLES_50: usize> QrsDetector<SAMPLES_350, SAMPLES_50> {
+impl<const SAMPLES_300: usize, const SAMPLES_50: usize> QrsDetector<SAMPLES_300, SAMPLES_50> {
     /// Returns a new QRS detector for signals sampled at `fs` sampling frequency.
     ///
     /// # Arguments
