@@ -40,6 +40,16 @@ impl SamplingFrequencyExt for usize {
     }
 }
 
+impl SamplingFrequencyExt for f64 {
+    fn sps(self) -> SamplingFrequency {
+        SamplingFrequency(self as f32)
+    }
+
+    fn ksps(self) -> SamplingFrequency {
+        (self * 1000.0).sps()
+    }
+}
+
 impl SamplingFrequency {
     /// Convert `ms` milliseconds to number of samples
     /// ```rust
