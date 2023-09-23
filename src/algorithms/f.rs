@@ -47,11 +47,10 @@ impl<const SAMPLES_300: usize, const SAMPLES_50: usize> F<SAMPLES_300, SAMPLES_5
         self.f_buffer.push(sample);
 
         // Calculate maximum value in the latest 50ms window
-        let max = self
+        let max: f32 = self
             .f_buffer
             .iter_unordered()
-            .max_by(|a, b| a.partial_cmp(b).unwrap())
-            .unwrap();
+            .fold(0.0, |acc, x| acc.max(x));
 
         // Keep the 50ms maximum values for each sample in latest 300ms window
         // The oldest sample corresponds to the oldest 50ms in the latest 350ms window
