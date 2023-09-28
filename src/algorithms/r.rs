@@ -24,6 +24,12 @@ impl R {
         }
     }
 
+    pub fn clear(&mut self) {
+        self.state = RState::Ignore;
+        self.rr.clear();
+        self.prev_idx = 0;
+    }
+
     fn enter_no_decrease(&mut self) {
         let rr_sum: u32 = self.rr.iter_unordered().sum();
         let rr_avg = rr_sum / 5;

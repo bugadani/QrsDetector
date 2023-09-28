@@ -2,10 +2,7 @@
 
 use core::marker::PhantomData;
 
-pub struct SlidingWindow<T, C>
-where
-    C: AsRef<[T]> + AsMut<[T]>,
-{
+pub struct SlidingWindow<T, C> {
     buffer: C,
     idx: usize,
     full: bool,
@@ -38,9 +35,13 @@ where
         self.full = false;
     }
 
+    pub fn capacity(&self) -> usize {
+        self.buffer.as_ref().len()
+    }
+
     pub fn len(&self) -> usize {
         if self.full {
-            self.buffer.as_ref().len()
+            self.capacity()
         } else {
             self.idx
         }
@@ -51,7 +52,7 @@ where
             None
         } else {
             let idx = if self.idx == 0 {
-                self.buffer.as_ref().len()
+                self.capacity()
             } else {
                 self.idx
             };

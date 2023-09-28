@@ -26,6 +26,12 @@ impl M {
         }
     }
 
+    pub fn clear(&mut self) {
+        self.mm.clear();
+        self.state = MState::Init(self.fs.s_to_samples(3.0), 0.0);
+        self.current_decrement = 0.0;
+    }
+
     fn m(&self) -> f32 {
         // M is calculated as an average value of MM.
         // Divide by 5 was done while calculating the individual Mx values

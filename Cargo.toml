@@ -14,3 +14,6 @@ exclude = [
 
 [dependencies]
 micromath = "^2.0.0"
+
+[features]
+alloc = []
