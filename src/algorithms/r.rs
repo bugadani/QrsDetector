@@ -11,7 +11,7 @@ enum RState {
 
 pub struct R {
     state: RState,
-    rr: SlidingWindow<u32, 5>,
+    rr: SlidingWindow<u32, [u32; 5]>,
     prev_idx: u32, // no need to make it an Option
 }
 
@@ -19,7 +19,7 @@ impl R {
     pub fn new() -> Self {
         Self {
             state: RState::Ignore,
-            rr: SlidingWindow::new(),
+            rr: SlidingWindow::default(),
             prev_idx: 0,
         }
     }

@@ -10,7 +10,7 @@ enum MState {
 
 pub struct M {
     state: MState,
-    mm: SlidingWindow<f32, 5>,
+    mm: SlidingWindow<f32, [f32; 5]>,
     fs: SamplingFrequency,
     pub current_decrement: f32,
 }
@@ -19,7 +19,7 @@ impl M {
     pub fn new(fs: SamplingFrequency) -> Self {
         Self {
             fs,
-            mm: SlidingWindow::new(),
+            mm: SlidingWindow::default(),
             // Initially M = 0.6*max(Y) is set for the first 3 s [originally 5s] of the signal
             state: MState::Init(fs.s_to_samples(3.0), 0.0),
             current_decrement: 0.0,

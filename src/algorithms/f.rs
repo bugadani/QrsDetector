@@ -12,9 +12,9 @@ pub struct F<const SAMPLES_300: usize, const SAMPLES_50: usize> {
     state: FState,
     /// 300ms of the individual max samples of the 50ms buffer.
     /// We store the maxima to save some memory and computation.
-    f_max_window: SlidingWindow<f32, SAMPLES_300>,
+    f_max_window: SlidingWindow<f32, [f32; SAMPLES_300]>,
     /// 50ms window of the signal
-    f_buffer: SlidingWindow<f32, SAMPLES_50>,
+    f_buffer: SlidingWindow<f32, [f32; SAMPLES_50]>,
 }
 
 impl<const SAMPLES_300: usize, const SAMPLES_50: usize> F<SAMPLES_300, SAMPLES_50> {
@@ -37,8 +37,8 @@ impl<const SAMPLES_300: usize, const SAMPLES_50: usize> F<SAMPLES_300, SAMPLES_5
 
         Self {
             state: FState::Ignore(fs.s_to_samples(2.65)),
-            f_max_window: SlidingWindow::new(),
-            f_buffer: SlidingWindow::new(),
+            f_max_window: SlidingWindow::default(),
+            f_buffer: SlidingWindow::default(),
         }
     }
 

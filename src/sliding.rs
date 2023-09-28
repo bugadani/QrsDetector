@@ -1,26 +1,34 @@
 //! Sliding window
 
-pub struct SlidingWindow<T, const N: usize> {
-    buffer: [T; N],
+use core::marker::PhantomData;
+
+pub struct SlidingWindow<T, C>
+where
+    C: AsRef<[T]> + AsMut<[T]>,
+{
+    buffer: C,
     idx: usize,
     full: bool,
+    _marker: PhantomData<T>,
 }
 
-impl<T: Default + Copy, const N: usize> Default for SlidingWindow<T, N> {
+impl<T: Default + Copy, const N: usize> Default for SlidingWindow<T, [T; N]> {
     fn default() -> Self {
-        Self::new()
+        Self::new([T::default(); N])
     }
 }
 
-impl<T: Copy, const N: usize> SlidingWindow<T, N> {
-    pub fn new() -> Self
-    where
-        T: Default,
-    {
+impl<T, C> SlidingWindow<T, C>
+where
+    T: Copy,
+    C: AsRef<[T]> + AsMut<[T]>,
+{
+    pub fn new(buffer: C) -> Self {
         Self {
-            buffer: [T::default(); N],
+            buffer,
             idx: 0,
             full: false,
+            _marker: PhantomData,
         }
     }
 
@@ -32,7 +40,7 @@ impl<T: Copy, const N: usize> SlidingWindow<T, N> {
 
     pub fn len(&self) -> usize {
         if self.full {
-            N
+            self.buffer.as_ref().len()
         } else {
             self.idx
         }
@@ -42,8 +50,12 @@ impl<T: Copy, const N: usize> SlidingWindow<T, N> {
         if self.idx == 0 && !self.full {
             None
         } else {
-            let idx = if self.idx == 0 { N } else { self.idx };
-            Some(self.buffer[idx - 1])
+            let idx = if self.idx == 0 {
+                self.buffer.as_ref().len()
+            } else {
+                self.idx
+            };
+            Some(self.buffer.as_ref()[idx - 1])
         }
     }
 
@@ -57,10 +69,11 @@ impl<T: Copy, const N: usize> SlidingWindow<T, N> {
     }
 
     pub fn push(&mut self, sample: T) -> Option<T> {
-        let old = self.full.then_some(self.buffer[self.idx]);
+        let buffer = self.buffer.as_mut();
+        let old = self.full.then_some(buffer[self.idx]);
 
-        self.buffer[self.idx] = sample;
-        self.idx = (self.idx + 1) % self.buffer.len();
+        buffer[self.idx] = sample;
+        self.idx = (self.idx + 1) % buffer.len();
         if self.idx == 0 {
             self.full = true;
         }
@@ -69,6 +82,6 @@ impl<T: Copy, const N: usize> SlidingWindow<T, N> {
     }
 
     pub fn iter_unordered(&self) -> impl Iterator<Item = T> + Clone + '_ {
-        (0..self.len()).map(|i| self.buffer[i])
+        (0..self.len()).map(|i| self.buffer.as_ref()[i])
     }
 }
