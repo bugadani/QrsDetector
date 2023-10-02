@@ -51,6 +51,11 @@ impl SamplingFrequencyExt for f64 {
 }
 
 impl SamplingFrequency {
+    /// Returns the sampling frequency in units of samples per second.
+    pub fn raw(self) -> f32 {
+        self.0
+    }
+
     /// Convert `ms` milliseconds to number of samples
     /// ```rust
     /// # use qrs_detector::sampling::*;
@@ -71,5 +76,27 @@ impl SamplingFrequency {
     /// ```
     pub fn s_to_samples(self, s: f32) -> usize {
         self.ms_to_samples(s * 1000.0)
+    }
+
+    /// Convert `samples` to seconds
+    /// ```rust
+    /// # use qrs_detector::sampling::*;
+    /// #
+    /// let s = 500.sps().samples_to_s(250);
+    /// assert_eq!(s, 0.5);
+    /// ```
+    pub fn samples_to_s(self, samples: usize) -> f32 {
+        (samples as f32) / self.0
+    }
+
+    /// Convert `samples` to milliseconds
+    /// ```rust
+    /// # use qrs_detector::sampling::*;
+    /// #
+    /// let s = 500.sps().samples_to_ms(250);
+    /// assert_eq!(s, 500.0);
+    /// ```
+    pub fn samples_to_ms(self, samples: usize) -> f32 {
+        self.samples_to_s(samples) * 1000.0
     }
 }

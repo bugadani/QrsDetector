@@ -6,6 +6,7 @@ Unreleased
  * `SamplingFrequencyExt` is now implemented for `f64`.
  * Added `Thresholds`, `QrsDetector::thresholds()`.
  * Added `alloc` feature to automatically allocate F buffers.
+ * Added `SamplingFrequency::{samples_to_s, samples_to_ms, raw}` functions.
 
 0.2.0
 ==========
