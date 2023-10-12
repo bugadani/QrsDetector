@@ -48,16 +48,16 @@ where
     }
 
     pub fn last(&self) -> Option<T> {
-        if self.idx == 0 && !self.full {
-            None
-        } else {
-            let idx = if self.idx == 0 {
+        let idx = if self.idx == 0 {
+            if self.full {
                 self.capacity()
             } else {
-                self.idx
-            };
-            Some(self.buffer.as_ref()[idx - 1])
-        }
+                return None;
+            }
+        } else {
+            self.idx
+        };
+        self.buffer.as_ref().get(idx - 1).copied()
     }
 
     #[allow(dead_code)]
