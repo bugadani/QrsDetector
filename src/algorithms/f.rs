@@ -93,7 +93,7 @@ where
             }
             FState::Integrate(f) => {
                 let (oldest_max, max) = self.update_f_buffers(sample);
-                FState::Integrate((f + (max - oldest_max.unwrap()) / 150.0).max(0.0))
+                FState::Integrate((f + (max - oldest_max.unwrap_or(0.0)) / 150.0).max(0.0))
             }
         };
     }
